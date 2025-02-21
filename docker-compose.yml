@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  consensus-node:
+    build: ./consensus
+    container_name: consensus_node
+    ports:
+      - "30303:30303"
+    networks:
+      - peochain_net
+
+  evm-node:
+    build: ./evm
+    container_name: evm_node
+    ports:
+      - "30304:30304"
+    networks:
+      - peochain_net
+
+  bridge-service:
+    build: ./bridge
+    container_name: bridge_service
+    networks:
+      - peochain_net
+
+  api-service:
+    build: ./api
+    container_name: api_service
+    ports:
+      - "8080:8080"
+    networks:
+      - peochain_net
+
+networks:
+  peochain_net:
+    driver: bridge
