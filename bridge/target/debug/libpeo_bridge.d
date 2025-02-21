@@ -1,0 +1,1 @@
+/home/arec1b0/Documents/Github/peochain-testnet/bridge/target/debug/libpeo_bridge.rlib: /home/arec1b0/Documents/Github/peochain-testnet/bridge/src/bridge.rs /home/arec1b0/Documents/Github/peochain-testnet/bridge/src/lib.rs

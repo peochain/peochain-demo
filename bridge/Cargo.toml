@@ -1,0 +1,19 @@
+[package]
+name = "bridge"
+version = "0.1.0"
+edition = "2021"
+authors = ["D.Krizhanovskyi <dkrizhanovskyi@peopay.io>"]
+description = "Cross-chain bridge module for PeoChain."
+license = "MIT"
+
+[dependencies]
+# For demonstration, no external crates beyond std.
+# Add any cryptographic libraries (e.g., merkleproof) if needed for real bridging.
+
+[lib]
+name = "peo_bridge"
+# If you created src/lib.rs, path to it:
+path = "src/lib.rs"
+
+[dev-dependencies]
+# Extra dependencies for tests only (optional).
