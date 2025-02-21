@@ -1,0 +1,1 @@
+/home/arec1b0/Documents/Github/peochain-testnet/evm/target/debug/libpeo_evm.rlib: /home/arec1b0/Documents/Github/peochain-testnet/evm/src/evm_core.rs /home/arec1b0/Documents/Github/peochain-testnet/evm/src/lib.rs

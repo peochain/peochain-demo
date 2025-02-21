@@ -1,0 +1,17 @@
+[package]
+name = "evm"
+version = "0.1.0"
+edition = "2021"
+authors = ["D.Krizhanovskyi <dkrizhanovskyi@peopay.io>"]
+description = "EVM compatibility module for PeoChain."
+license = "MIT"
+
+[dependencies]
+# Potential dependencies for a real EVM library could go here.
+
+[lib]
+name = "peo_evm"
+path = "src/lib.rs"
+
+[dev-dependencies]
+# Include testing frameworks or mock libraries if needed.
