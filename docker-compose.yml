@@ -20,6 +20,8 @@ services:
   bridge-service:
     build: ./bridge
     container_name: bridge_service
+    ports:
+      - "30305:30305"
     networks:
       - peochain_net
 
@@ -30,6 +32,9 @@ services:
       - "8080:8080"
     networks:
       - peochain_net
+    environment:
+      # Allows overriding the API port if needed
+      - API_PORT=8080
 
 networks:
   peochain_net:
