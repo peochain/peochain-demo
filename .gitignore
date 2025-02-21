@@ -1,0 +1,21 @@
+# -----------------------------
+# PEOCHAIN-DEMO: GITIGNORE FILE
+# -----------------------------
+# This file follows a high-tech coding standard to exclude
+# files and directories that should not be committed to Git.
+#
+# Rust build artifacts
+/target/
+# Go build artifacts
+/bin/
+/pkg/
+# Docker
+*.env
+docker-compose.override.yml
+# Logs and temporary files
+*.log
+*.tmp
+# System-specific or editor files
+.DS_Store
+.idea/
+.vscode/
