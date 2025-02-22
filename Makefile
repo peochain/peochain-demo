@@ -12,7 +12,7 @@ build:
 	cd evm && cargo build
 	cd bridge && cargo build
 	@echo "==> Building Go API..."
-	cd api && go build -o peochain-api main.go
+	cd api && go build -o peochain-api .
 
 test:
 	@echo "==> Testing Rust components..."
