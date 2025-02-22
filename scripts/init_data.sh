@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-/*!
- * ----------------------------------------------------------------------------
- * PEOCHAIN-DEMO: INIT DATA SCRIPT
- * ----------------------------------------------------------------------------
- * This script demonstrates initial data setup for the PeoChain testnet:
- * creating accounts, deploying example smart contracts, setting validators, etc.
- *
- * PRINCIPLES:
- * - SRP: focuses on bootstrap operations only.
- * - OCP: new initialization routines can be added without changing the script’s core.
- * - DRY & KISS: re-usable function calls to the Go API or direct container exec.
- */
+# ----------------------------------------------------------------------------
+# PEOCHAIN-DEMO: INIT DATA SCRIPT
+# ----------------------------------------------------------------------------
+# This script demonstrates initial data setup for the PeoChain testnet:
+# creating accounts, deploying example smart contracts, setting validators, etc.
+#
+# PRINCIPLES:
+# - SRP: focuses on bootstrap operations only.
+# - OCP: new initialization routines can be added without changing the script’s core.
+# - DRY & KISS: re-usable function calls to the Go API or direct container exec.
+# ----------------------------------------------------------------------------
 
 set -euo pipefail
 
