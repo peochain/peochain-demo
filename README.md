@@ -6,7 +6,7 @@
 
 [![Bitcointalk Thread](https://img.shields.io/badge/Bitcointalk-Thread-blue?style=for-the-badge)](https://bitcointalk.org/index.php?topic=5532958.msg65092666#msg65092666)  
 
-## Overview
+
 PeoChain is an innovative blockchain designed with Rust for high performance, security, and sustainability. It features a unique **PoSyg + DCS** consensus mechanism and an **EVM** module (similar to Ethereum’s), making it easy for developers to deploy smart contracts. PeoPay complements PeoChain by offering a user-friendly, mobile-first platform targeting underbanked populations and anyone looking for fast, affordable finance solutions.
 
 **Key Highlights**
@@ -142,11 +142,7 @@ This project is initially authored and maintained by **Daniil Krizhanovskyi** (B
 This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
 
 ---
-
-### Tips
-1. Adjust the **repository URL** to match your actual hosting location.
-2. Update **community links** with real addresses (e.g., GitHub, Slack, Discord).
-3. If you have a **license** file, mention it explicitly under a “License” heading.
+[<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Layer 2s are blockchain’s B-team—slow, shaky, and stuck. PeoChain’s synergy, speed, and scale bury them. The future’s here. Lead or bleed: <a href="https://t.co/q08fs2yUEo">https://t.co/q08fs2yUEo</a> <a href="https://twitter.com/hashtag/crypto?src=hash&amp;ref_src=twsrc%5Etfw">#crypto</a>, <a href="https://twitter.com/hashtag/blockchain?src=hash&amp;ref_src=twsrc%5Etfw">#blockchain</a>, <a href="https://twitter.com/hashtag/DeFi?src=hash&amp;ref_src=twsrc%5Etfw">#DeFi</a>, <a href="https://twitter.com/hashtag/PeoPay?src=hash&amp;ref_src=twsrc%5Etfw">#PeoPay</a>, <a href="https://twitter.com/hashtag/Layer2Dead?src=hash&amp;ref_src=twsrc%5Etfw">#Layer2Dead</a></p>&mdash; Daniil Krizhanovskyi (@arec1b0) <a href="https://twitter.com/arec1b0/status/1893168863338021373?ref_src=twsrc%5Etfw">February 22, 2025</a></blockquote>](https://twitter.com/arec1b0/status/1893168863338021373)
 
 ## Linked Documents
 
