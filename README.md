@@ -2,6 +2,8 @@
 
 > **Next-Generation “Layer Meta” Blockchain + Mobile Financial Ecosystem**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14908526.svg)](https://doi.org/10.5281/zenodo.14908526)
+
 ## Overview
 PeoChain is an innovative blockchain designed with Rust for high performance, security, and sustainability. It features a unique **PoSyg + DCS** consensus mechanism and an **EVM** module (similar to Ethereum’s), making it easy for developers to deploy smart contracts. PeoPay complements PeoChain by offering a user-friendly, mobile-first platform targeting underbanked populations and anyone looking for fast, affordable finance solutions.
 
