@@ -1,16 +1,15 @@
 [package]
 name = "consensus"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-authors = ["D.Krizhanovskyi <dkrizhanovskyi@peopay.io>"]
+authors = ["D.Krizhanovskyi <d.krizhanovskyi@peochain.xyz>"]
 description = "PoSyg + DCS consensus module for PeoChain."
 license = "MIT"
 
 [dependencies]
-# Specify any external crates if needed; for now, it's minimal.
+rand = "0.8.5"
 
 [dev-dependencies]
-# Include any crates needed only for testing.
 
 [lib]
 name = "peo_consensus"
