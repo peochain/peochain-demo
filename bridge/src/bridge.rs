@@ -58,10 +58,12 @@
          // In a real environment, this would require verifying external chain
          // proofs and updating on-chain state. Here we just increment the
          // user’s balance.
-         self.ensure_user(user);
-         if let Some(bal) = self.balances.get_mut(user) {
-             *bal += amount;
-         }
+        self.ensure_user(user);
+        if let Some(bal) = self.balances.get_mut(user) {
+            *bal = bal
+                .checked_add(amount)
+                .ok_or_else(|| format!("Deposit overflow. user={}", user))?;
+        }
          println!("Deposit successful: user={}, amount={}", user, amount);
          Ok(())
      }
