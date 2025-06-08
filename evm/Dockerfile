@@ -9,7 +9,7 @@ FROM rust:1.68 as builder
 WORKDIR /app
 
 COPY Cargo.toml .
-COPY lib.rs .
+COPY src/lib.rs ./src/lib.rs
 COPY src ./src
 COPY tests ./tests
 COPY contracts ./contracts
