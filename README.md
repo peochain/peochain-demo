@@ -4,6 +4,10 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14908526.svg)](https://doi.org/10.5281/zenodo.14908526)
 
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15617401.svg)](https://doi.org/10.5281/zenodo.15617401)
+
+
 [![Bitcointalk Thread](https://img.shields.io/badge/Bitcointalk-Thread-blue?style=for-the-badge)](https://bitcointalk.org/index.php?topic=5532958.msg65092666#msg65092666)  
 
 
