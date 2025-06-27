@@ -62,11 +62,11 @@
      let invalid_proof: &[u8] = &[];
  
      assert!(
-         service.verify_proof(valid_proof),
+         service.verify_proof(valid_proof).is_ok(),
          "Non-empty proof should be considered valid"
      );
      assert!(
-         !service.verify_proof(invalid_proof),
+         service.verify_proof(invalid_proof).is_err(),
          "Empty proof data should be considered invalid"
      );
  }

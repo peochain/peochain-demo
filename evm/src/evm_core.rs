@@ -18,11 +18,16 @@
  * - DRY & KISS: repeated logic is confined to helper methods; code remains readable.
  */
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+
 /// Trait that abstracts basic EVM operations.
 pub trait EvmExecutor {
     fn execute_transaction(&mut self, from: &str, to: &str, data: &[u8]) -> Result<(), String>;
     fn get_balance(&self, address: &str) -> u64;
     fn set_balance(&mut self, address: &str, amount: u64) -> Result<(), String>;
+    fn get_memory_usage(&self) -> usize;
+    fn get_account_count(&self) -> usize;
 }
 
 /// Maximum allowed length for Ethereum addresses to prevent unbounded allocations
@@ -31,6 +36,11 @@ const MAX_ADDRESS_LENGTH: usize = 42; // Standard Ethereum address length (0x + 
 const MAX_ACCOUNTS: usize = 1_000_000;
 /// Maximum transaction data size (in bytes)
 const MAX_TRANSACTION_DATA_SIZE: usize = 32768; // 32KB
+/// Statistics reporting interval in seconds
+const STATS_REPORTING_INTERVAL: u64 = 300; // 5 minutes
+
+/// Tracks overall memory usage for EVM module
+static TOTAL_EVM_MEMORY_USAGE: AtomicUsize = AtomicUsize::new(0);
 
 /// Validates Ethereum address format and length
 fn validate_address(address: &str) -> Result<(), String> {
@@ -52,6 +62,14 @@ fn validate_address(address: &str) -> Result<(), String> {
 pub struct BasicEvmExecutor {
     /// A simplistic mapping of addresses to balances for demonstration.
     balances: std::collections::HashMap<String, u64>,
+    /// Tracks when the last memory report was generated
+    last_stats_report: Instant,
+    /// Tracks operations count since last report
+    operations_count: usize,
+    /// Tracks current block number
+    block_number: u64,
+    /// Tracks blockchain memory usage over time (bytes)
+    blockchain_size: usize,
 }
 
 impl BasicEvmExecutor {
@@ -59,6 +77,75 @@ impl BasicEvmExecutor {
     pub fn new() -> Self {
         Self {
             balances: std::collections::HashMap::new(),
+            last_stats_report: Instant::now(),
+            operations_count: 0,
+            block_number: 0,
+            blockchain_size: 0,
+        }
+    }
+    
+    /// Estimates the current memory usage of the EVM
+    fn estimate_memory_usage(&self) -> usize {
+        let mut total_bytes = 0;
+        
+        // Base structure size
+        total_bytes += std::mem::size_of::<BasicEvmExecutor>();
+        
+        // HashMap overhead estimate
+        total_bytes += std::mem::size_of::<std::collections::HashMap<String, u64>>();
+        
+        // Calculate size of all accounts
+        for (address, _) in &self.balances {
+            // String memory: capacity (not just length) + pointer overhead
+            let string_capacity = address.capacity();
+            total_bytes += std::mem::size_of::<String>() + string_capacity;
+            
+            // u64 value
+            total_bytes += std::mem::size_of::<u64>();
+        }
+        
+        // Add blockchain storage size
+        total_bytes += self.blockchain_size;
+        
+        total_bytes
+    }
+    
+    /// Updates memory usage statistics and logs if needed
+    fn update_memory_stats(&mut self) {
+        self.operations_count += 1;
+        
+        // Only recalculate periodically to reduce overhead
+        if self.last_stats_report.elapsed() > Duration::from_secs(STATS_REPORTING_INTERVAL) {
+            let memory_usage = self.estimate_memory_usage();
+            
+            // Update atomic counter for global monitoring
+            TOTAL_EVM_MEMORY_USAGE.store(memory_usage, Ordering::Relaxed);
+            
+            // Log memory usage statistics
+            println!(
+                "[MEMORY STATS] EVM module using ~{} KB, {} accounts, {} operations since last report",
+                memory_usage / 1024,
+                self.balances.len(),
+                self.operations_count
+            );
+            
+            self.last_stats_report = Instant::now();
+            self.operations_count = 0;
+        }
+    }
+    
+    /// Increments the block number and updates blockchain size
+    pub fn increment_block_number(&mut self, block_size: usize) {
+        self.block_number += 1;
+        self.blockchain_size += block_size;
+        
+        // Log when blockchain size grows significantly
+        if self.block_number % 100 == 0 {
+            println!(
+                "[BLOCKCHAIN] Size: {} MB, Blocks: {}",
+                self.blockchain_size / (1024 * 1024),
+                self.block_number
+            );
         }
     }
 
@@ -72,6 +159,9 @@ impl BasicEvmExecutor {
                 return Err("Maximum number of accounts reached".to_string());
             }
             self.balances.insert(addr.to_string(), 0);
+            
+            // Update memory stats when adding new account
+            self.update_memory_stats();
         }
         Ok(())
     }
@@ -90,10 +180,16 @@ impl EvmExecutor for BasicEvmExecutor {
         self.ensure_address(from)?;
         self.ensure_address(to)?;
 
+        // Update blockchain size for memory tracking
+        self.blockchain_size += data.len() + from.len() + to.len() + 16; // 16 bytes for tx metadata
+        
+        // Update memory usage statistics
+        self.update_memory_stats();
+
         // Debug log to simulate contract execution
         println!(
-            "Executing transaction from: {} to: {}, data: {:?}",
-            from, to, data
+            "Executing transaction from: {} to: {}, data size: {} bytes",
+            from, to, data.len()
         );
         Ok(())
     }
@@ -113,6 +209,20 @@ impl EvmExecutor for BasicEvmExecutor {
         if let Some(balance) = self.balances.get_mut(address) {
             *balance = amount;
         }
+        
+        // Update memory stats
+        self.update_memory_stats();
+        
         Ok(())
+    }
+    
+    /// Returns the estimated memory usage of the EVM
+    fn get_memory_usage(&self) -> usize {
+        self.estimate_memory_usage()
+    }
+    
+    /// Returns the current number of accounts in the EVM
+    fn get_account_count(&self) -> usize {
+        self.balances.len()
     }
 }

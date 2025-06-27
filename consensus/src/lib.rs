@@ -2,6 +2,8 @@
 
 use rand::Rng;
 use rand::thread_rng;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 /// Represents errors that can occur during consensus operations.
 ///
@@ -20,9 +22,21 @@ use rand::thread_rng;
 pub enum ConsensusError {
     /// Indicates a block proposal was invalid (e.g., malicious or malformed).
     InvalidBlock,
+    /// Indicates the block size is too large
+    BlockSizeTooLarge,
+    /// Indicates too many transactions in a block
+    TooManyTransactions,
+    /// Indicates a transaction is invalid
+    InvalidTransaction,
     /// Represents a network-related failure, with a descriptive message.
     NetworkError(String),
 }
+
+/// Global memory usage tracking for consensus module
+static TOTAL_CONSENSUS_MEMORY_USAGE: AtomicUsize = AtomicUsize::new(0);
+
+/// Statistics reporting interval in seconds
+const STATS_REPORTING_INTERVAL: u64 = 300; // 5 minutes
 
 /// Defines the behavior required for a consensus engine in the PeoChain network.
 ///
@@ -109,6 +123,15 @@ pub struct Block {
 /// Maximum number of transactions allowed per block to prevent memory exhaustion
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 10000;
 
+/// Maximum size of a block in bytes
+const MAX_BLOCK_SIZE: usize = 8 * 1024 * 1024; // 8MB
+
+/// Maximum size of a transaction in bytes
+const MAX_TRANSACTION_SIZE: usize = 32 * 1024; // 32KB 
+
+/// Maximum length of proposer ID
+const MAX_PROPOSER_ID_LENGTH: usize = 256;
+
 impl Block {
     /// Creates a new block with validation for transaction limits
     pub fn new(id: u64, proposer: String, transactions: Vec<String>) -> Result<Self, String> {
@@ -121,8 +144,35 @@ impl Block {
         }
         
         // Validate proposer ID length
-        if proposer.len() > 256 {
-            return Err("Proposer ID too long".to_string());
+        if proposer.len() > MAX_PROPOSER_ID_LENGTH {
+            return Err(format!(
+                "Proposer ID too long. Maximum {} characters allowed, got {}",
+                MAX_PROPOSER_ID_LENGTH,
+                proposer.len()
+            ));
+        }
+        
+        // Calculate total block size
+        let mut total_size = proposer.len();
+        for tx in &transactions {
+            // Check individual transaction size
+            if tx.len() > MAX_TRANSACTION_SIZE {
+                return Err(format!(
+                    "Transaction too large. Maximum {} bytes allowed, got {}",
+                    MAX_TRANSACTION_SIZE,
+                    tx.len()
+                ));
+            }
+            total_size += tx.len();
+        }
+        
+        // Check total block size
+        if total_size > MAX_BLOCK_SIZE {
+            return Err(format!(
+                "Block too large. Maximum {} bytes allowed, current size {}",
+                MAX_BLOCK_SIZE,
+                total_size
+            ));
         }
         
         Ok(Block {
@@ -134,17 +184,47 @@ impl Block {
     
     /// Adds a transaction to the block with bounds checking
     pub fn add_transaction(&mut self, transaction: String) -> Result<(), String> {
+        // Check transaction count
         if self.transactions.len() >= MAX_TRANSACTIONS_PER_BLOCK {
             return Err("Block transaction limit reached".to_string());
         }
         
         // Validate transaction size to prevent large string allocations
-        if transaction.len() > 4096 {  // 4KB limit per transaction
-            return Err("Transaction too large".to_string());
+        if transaction.len() > MAX_TRANSACTION_SIZE {
+            return Err(format!(
+                "Transaction too large. Maximum {} bytes allowed, got {}",
+                MAX_TRANSACTION_SIZE,
+                transaction.len()
+            ));
+        }
+        
+        // Calculate current block size
+        let current_size = self.estimate_block_size();
+        
+        // Check if adding this transaction would exceed block size limit
+        if current_size + transaction.len() > MAX_BLOCK_SIZE {
+            return Err(format!(
+                "Adding transaction would exceed block size limit. Current: {}, Max: {}",
+                current_size,
+                MAX_BLOCK_SIZE
+            ));
         }
         
         self.transactions.push(transaction);
         Ok(())
+    }
+    
+    /// Estimates the total size of the block in bytes
+    pub fn estimate_block_size(&self) -> usize {
+        let mut total_size = 8; // u64 id
+        total_size += self.proposer.len();
+        
+        // Add transaction sizes
+        for tx in &self.transactions {
+            total_size += tx.len();
+        }
+        
+        total_size
     }
 }
 
@@ -174,6 +254,8 @@ pub struct PosygDcsEngine {
     accepted_blocks: u64,
     violations: u64,
     is_malicious: bool,
+    last_stats_report: Instant,
+    operations_count: usize,
 }
 
 impl PosygDcsEngine {
@@ -185,14 +267,61 @@ impl PosygDcsEngine {
     /// * `stake` - The amount of stake the validator has committed.
     /// * `is_malicious` - If true, the validator will propose invalid blocks.
     pub fn new(validator_id: String, stake: u64, is_malicious: bool) -> Self {
+        // Validate validator ID length
+        let validated_id = if validator_id.len() > MAX_PROPOSER_ID_LENGTH {
+            validator_id[0..MAX_PROPOSER_ID_LENGTH].to_string()
+        } else {
+            validator_id
+        };
+        
         Self {
-            validator_id,
+            validator_id: validated_id,
             synergy_score: 0.0,
             stake,
             proposed_blocks: 0,
             accepted_blocks: 0,
             violations: 0,
             is_malicious,
+            last_stats_report: Instant::now(),
+            operations_count: 0,
+        }
+    }
+    
+    /// Estimates memory usage of this validator
+    fn estimate_memory_usage(&self) -> usize {
+        let mut total_bytes = 0;
+        
+        // Base struct size
+        total_bytes += std::mem::size_of::<PosygDcsEngine>();
+        
+        // Dynamic String memory for validator_id
+        total_bytes += self.validator_id.capacity();
+        
+        total_bytes
+    }
+    
+    /// Updates memory usage statistics and logs if needed
+    fn update_memory_stats(&mut self) {
+        self.operations_count += 1;
+        
+        // Only recalculate periodically to reduce overhead
+        if self.last_stats_report.elapsed() > Duration::from_secs(STATS_REPORTING_INTERVAL) {
+            let memory_usage = self.estimate_memory_usage();
+            
+            // Update atomic counter for global monitoring
+            let current = TOTAL_CONSENSUS_MEMORY_USAGE.load(Ordering::Relaxed);
+            TOTAL_CONSENSUS_MEMORY_USAGE.store(current + memory_usage, Ordering::Relaxed);
+            
+            // Log memory usage statistics
+            println!(
+                "[MEMORY STATS] Validator {} using ~{} bytes, {} operations since last report",
+                self.validator_id,
+                memory_usage,
+                self.operations_count
+            );
+            
+            self.last_stats_report = Instant::now();
+            self.operations_count = 0;
         }
     }
 
@@ -248,21 +377,46 @@ impl PosygDcsEngine {
 
 impl ConsensusEngine for PosygDcsEngine {
     fn propose_block(&self) -> Result<Block, ConsensusError> {
-        let block = if self.is_malicious {
-            Block::new(
-                0,
-                self.validator_id.clone(),
-                vec!["invalid_tx".to_string()],
-            )
+        // Create transactions for the block
+        let transactions = if self.is_malicious {
+            // Malicious validator attempts to create oversized transactions or invalid blocks
+            match rand::thread_rng().gen_range(0..3) {
+                0 => vec!["invalid_tx".to_string()],
+                1 => {
+                    // Try to create an oversized transaction (will be rejected)
+                    vec!["x".repeat(MAX_TRANSACTION_SIZE + 1000)]
+                },
+                _ => {
+                    // Try to create too many transactions (will be rejected)
+                    let tx_count = MAX_TRANSACTIONS_PER_BLOCK + 10;
+                    (0..tx_count).map(|i| format!("tx{}", i)).collect()
+                }
+            }
         } else {
-            Block::new(
-                self.proposed_blocks + 1,
-                self.validator_id.clone(),
-                Vec::new(), // Start with empty transactions
-            )
+            // Honest validator creates valid blocks
+            Vec::new() // Start with empty transactions
         };
+    
+        // Attempt to create a new block
+        let block = Block::new(
+            self.proposed_blocks + 1,
+            self.validator_id.clone(),
+            transactions,
+        );
         
-        block.map_err(|e| ConsensusError::InvalidBlock)
+        // Convert string errors to ConsensusError type
+        match block {
+            Ok(b) => Ok(b),
+            Err(e) => {
+                if e.contains("too large") {
+                    Err(ConsensusError::BlockSizeTooLarge)
+                } else if e.contains("Too many transactions") {
+                    Err(ConsensusError::TooManyTransactions)
+                } else {
+                    Err(ConsensusError::InvalidBlock)
+                }
+            }
+        }
     }
 
     fn validate_block(&self, block: &Block) -> Result<(), ConsensusError> {
@@ -298,6 +452,9 @@ impl ConsensusEngine for PosygDcsEngine {
         };
 
         self.synergy_score += ALPHA * h + BETA * e + GAMMA * v - DELTA * p;
+        
+        // Update memory statistics
+        self.update_memory_stats();
     }
 
     fn get_synergy_score(&self) -> f64 {
@@ -320,6 +477,9 @@ impl ConsensusEngine for PosygDcsEngine {
 ///         PosygDcsEngine::new("v1".to_string(), 1000, false),
 ///         PosygDcsEngine::new("v2".to_string(), 1500, false),
 ///     ],
+///     last_memory_report: std::time::Instant::now(),
+///     blocks_processed: 0,
+///     max_validators: 1000,
 /// };
 /// network.run_consensus_round();
 /// let v1 = &network.validators[0];
@@ -327,13 +487,86 @@ impl ConsensusEngine for PosygDcsEngine {
 /// ```
 pub struct Network {
     pub validators: Vec<PosygDcsEngine>,
+    last_memory_report: Instant,
+    blocks_processed: usize,
+    max_validators: usize,
 }
 
 impl Network {
+    /// Creates a new Network with default settings
+    pub fn new() -> Self {
+        Network {
+            validators: Vec::new(),
+            last_memory_report: Instant::now(),
+            blocks_processed: 0,
+            max_validators: 1000, // Default maximum number of validators
+        }
+    }
+
+    /// Adds a validator to the network with bounds checking
+    pub fn add_validator(&mut self, validator: PosygDcsEngine) -> Result<(), ConsensusError> {
+        if self.validators.len() >= self.max_validators {
+            return Err(ConsensusError::NetworkError(
+                "Maximum validator capacity reached".to_string()
+            ));
+        }
+        
+        self.validators.push(validator);
+        
+        // Update memory usage statistics after adding a validator
+        self.update_memory_stats();
+        
+        Ok(())
+    }
+    
+    /// Estimates memory usage of the network
+    fn estimate_memory_usage(&self) -> usize {
+        let mut total_bytes = std::mem::size_of::<Network>();
+        
+        // Add size of validators vector
+        total_bytes += self.validators.capacity() * std::mem::size_of::<PosygDcsEngine>();
+        
+        // Estimate validator memory usage
+        for validator in &self.validators {
+            // Using internal method, which in real code would be available
+            // Here we use a rough estimate
+            total_bytes += std::mem::size_of::<PosygDcsEngine>();
+            total_bytes += validator.validator_id().len();
+        }
+        
+        total_bytes
+    }
+    
+    /// Updates memory usage statistics and logs if needed
+    fn update_memory_stats(&mut self) {
+        // Only recalculate periodically to reduce overhead
+        if self.last_memory_report.elapsed() > Duration::from_secs(STATS_REPORTING_INTERVAL) {
+            let memory_usage = self.estimate_memory_usage();
+            
+            // Log memory usage statistics
+            println!(
+                "[MEMORY STATS] Consensus network using ~{} KB, {} validators, {} blocks since last report",
+                memory_usage / 1024,
+                self.validators.len(),
+                self.blocks_processed
+            );
+            
+            self.last_memory_report = Instant::now();
+            self.blocks_processed = 0;
+            
+            // Update global memory counter
+            TOTAL_CONSENSUS_MEMORY_USAGE.store(memory_usage, Ordering::Relaxed);
+        }
+    }
+
     /// Selects a validator to propose the next block based on a weighted random selection.
     ///
     /// The weight is calculated as the sum of the validator's synergy score and a fraction of its stake.
     pub fn select_proposer(&self) -> usize {
+        if self.validators.is_empty() {
+            return 0;
+        }
+        
         let total_weight: f64 = self.validators
             .iter()
             .map(|v| v.get_synergy_score() + v.stake as f64 * 0.01)
@@ -359,14 +592,35 @@ impl Network {
     /// Executes a single round of the consensus protocol.
     ///
     /// A validator is selected to propose a block, which is then validated by others, and scores are updated.
-    pub fn run_consensus_round(&mut self) {
-        let proposer_index = self.select_proposer();
-        let (block, is_malicious);
-        {
-            let proposer = &mut self.validators[proposer_index];
-            block = proposer.propose_block().unwrap();
-            is_malicious = proposer.is_malicious();
+    pub fn run_consensus_round(&mut self) -> Result<(), ConsensusError> {
+        if self.validators.is_empty() {
+            return Err(ConsensusError::NetworkError("No validators available".to_string()));
         }
+        
+        let proposer_index = self.select_proposer();
+        
+        // Attempt to create a block proposal
+        let block_result = self.validators[proposer_index].propose_block();
+        
+        // If proposal fails, update scores and return early
+        let block = match block_result {
+            Ok(block) => block,
+            Err(err) => {
+                let proposer = &mut self.validators[proposer_index];
+                let is_malicious = proposer.is_malicious();
+                // Only count as violation if malicious
+                proposer.update_scores(false, is_malicious);
+                proposer.increment_proposed_blocks();
+                
+                // Count the block as processed even though it failed
+                self.blocks_processed += 1;
+                self.update_memory_stats();
+                
+                return Err(err);
+            }
+        };
+        
+        let is_malicious = self.validators[proposer_index].is_malicious();
 
         let mut is_valid = true;
         for (i, validator) in self.validators.iter().enumerate() {
@@ -385,5 +639,26 @@ impl Network {
             proposer.increment_accepted_blocks();
         }
         proposer.increment_proposed_blocks();
+        
+        // Increment block counter and update memory stats
+        self.blocks_processed += 1;
+        self.update_memory_stats();
+        
+        Ok(())
+    }
+    
+    /// Returns the maximum number of validators allowed in the network
+    pub fn max_validators(&self) -> usize {
+        self.max_validators
+    }
+    
+    /// Sets the maximum number of validators allowed in the network
+    pub fn set_max_validators(&mut self, max: usize) {
+        self.max_validators = max;
+    }
+    
+    /// Returns the estimated memory usage of this network
+    pub fn get_memory_usage(&self) -> usize {
+        self.estimate_memory_usage()
     }
 }

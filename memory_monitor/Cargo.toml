@@ -1,0 +1,8 @@
+[package]
+name = "memory_monitor"
+version = "0.1.0"
+edition = "2021"
+authors = ["D.Krizhanovskyi <dkrizhanovskyi@peopay.io>"]
+description = "Memory monitoring utilities for PeoChain"
+
+[dependencies]

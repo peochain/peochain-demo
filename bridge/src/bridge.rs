@@ -10,8 +10,12 @@
                 .checked_add(amount)
                 .ok_or_else(|| "Deposit would cause balance overflow".to_string())?;
         }
-         println!("Deposit successful: user={}, amount={}", user, amount);
-         Ok(())
+        
+        // Periodically update memory statistics
+        self.update_memory_stats();
+        
+        println!("Deposit successful: user={}, amount={}", user, amount);
+        Ok(())
      }CHAIN-DEMO: RUST BRIDGE MODULE
  * ---------------------------------------------------------------------------
  * This module defines the basic cross-chain bridge logic to synchronize
@@ -31,9 +35,20 @@
  */
 
  use std::collections::HashMap;
+ use std::sync::atomic::{AtomicUsize, Ordering};
+ use std::time::{Duration, Instant};
 
  /// Maximum allowed length for user identifiers to prevent unbounded allocations
  const MAX_USER_ID_LENGTH: usize = 256;
+ 
+ /// Maximum size for proof data (64KB)
+ const MAX_PROOF_SIZE: usize = 65536; // 64KB
+ 
+ /// Statistics reporting interval in seconds
+ const STATS_REPORTING_INTERVAL: u64 = 300; // 5 minutes
+ 
+ /// Tracks overall memory usage for HashMap structures
+ static TOTAL_BRIDGE_MEMORY_USAGE: AtomicUsize = AtomicUsize::new(0);
 
  /// Validates user input to prevent unbounded string allocations
  fn validate_user_id(user: &str) -> Result<(), String> {
@@ -54,8 +69,9 @@
  pub trait BridgeEngine {
      fn deposit(&mut self, user: &str, amount: u64) -> Result<(), String>;
      fn withdraw(&mut self, user: &str, amount: u64) -> Result<(), String>;
-     fn verify_proof(&self, proof_data: &[u8]) -> bool;
+     fn verify_proof(&self, proof_data: &[u8]) -> Result<(), String>;
      fn get_balance(&self, user: &str) -> u64;
+     fn get_memory_usage(&self) -> usize;
  }
  
  /// BridgeService is a basic implementation of a cross-chain bridge engine.
@@ -64,6 +80,10 @@
      /// Track user balances (in a real-world scenario, these might
      /// be tracked on-chain and verified via cryptographic proofs).
      balances: HashMap<String, u64>,
+     /// Monitor memory usage statistics
+     last_stats_report: Instant,
+     /// Total number of operations processed
+     operations_count: usize,
  }
  
  impl BridgeService {
@@ -71,6 +91,54 @@
      pub fn new() -> Self {
          BridgeService {
              balances: HashMap::new(),
+             last_stats_report: Instant::now(),
+             operations_count: 0,
+         }
+     }
+     
+     /// Estimates memory usage of current HashMap structures
+     fn estimate_memory_usage(&self) -> usize {
+         // Approximate memory calculation for HashMap entries
+         // Each entry has a key (String) and a value (u64)
+         let mut total_bytes = 0;
+         
+         // HashMap overhead (very rough estimate)
+         total_bytes += std::mem::size_of::<HashMap<String, u64>>();
+         
+         // Estimate for each entry
+         for (key, _) in &self.balances {
+             // String memory: capacity (not just length) + pointer overhead
+             let string_capacity = key.capacity();
+             total_bytes += std::mem::size_of::<String>() + string_capacity;
+             
+             // u64 value
+             total_bytes += std::mem::size_of::<u64>();
+         }
+         
+         total_bytes
+     }
+     
+     /// Updates memory usage statistics and logs if needed
+     fn update_memory_stats(&mut self) {
+         self.operations_count += 1;
+         
+         // Only recalculate periodically to reduce overhead
+         if self.last_stats_report.elapsed() > Duration::from_secs(STATS_REPORTING_INTERVAL) {
+             let memory_usage = self.estimate_memory_usage();
+             
+             // Update atomic counter for global monitoring
+             TOTAL_BRIDGE_MEMORY_USAGE.store(memory_usage, Ordering::Relaxed);
+             
+             // Log memory usage statistics
+             println!(
+                 "[MEMORY STATS] Bridge module using ~{} KB, {} users, {} operations since last report",
+                 memory_usage / 1024,
+                 self.balances.len(),
+                 self.operations_count
+             );
+             
+             self.last_stats_report = Instant::now();
+             self.operations_count = 0;
          }
      }
  
@@ -78,7 +146,15 @@
      fn ensure_user(&mut self, user: &str) -> Result<(), String> {
          validate_user_id(user)?;
          if !self.balances.contains_key(user) {
+             // Check if maximum capacity is reached
+             if self.balances.len() >= 100_000 {
+                 return Err("Maximum user capacity reached".to_string());
+             }
+             
              self.balances.insert(user.to_string(), 0);
+             
+             // Update memory statistics after adding a new user
+             self.update_memory_stats();
          }
          Ok(())
      }
@@ -108,15 +184,34 @@
              return Err("Insufficient balance for withdrawal".to_string());
          }
          *balance -= amount;
+         
+         // Periodically update memory statistics
+         self.update_memory_stats();
+         
          println!("Withdrawal successful: user={}, amount={}", user, amount);
          Ok(())
      }
  
      /// Minimal proof verification. In reality, this would involve
      /// cryptographic checks of Merkle proofs or signature-based validation.
-     fn verify_proof(&self, proof_data: &[u8]) -> bool {
-         // For demo: any non-empty proof_data is "valid"
-         !proof_data.is_empty()
+     fn verify_proof(&self, proof_data: &[u8]) -> Result<(), String> {
+         // Check proof size to prevent DOS attacks
+         if proof_data.is_empty() {
+             return Err("Empty proof data provided".to_string());
+         }
+         
+         if proof_data.len() > MAX_PROOF_SIZE {
+             return Err(format!("Proof data too large. Maximum size is {} bytes, got {}", 
+                                MAX_PROOF_SIZE, proof_data.len()));
+         }
+         
+         // Validate proof structure (basic check for demonstration)
+         // In a real implementation, this would perform cryptographic validation
+         if proof_data[0] == 0 {
+             return Err("Invalid proof format".to_string());
+         }
+         
+         Ok(())
      }
  
      /// Returns the current balance of the specified user.
@@ -126,6 +221,11 @@
              return 0;
          }
          *self.balances.get(user).unwrap_or(&0)
+     }
+     
+     /// Returns the estimated memory usage of this bridge service
+     fn get_memory_usage(&self) -> usize {
+         self.estimate_memory_usage()
      }
  }
  
