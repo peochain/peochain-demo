@@ -102,8 +102,50 @@ pub struct Block {
     pub id: u64,
     /// Identifier of the validator that proposed the block.
     pub proposer: String,
-    /// List of transactions included in the block.
+    /// List of transactions included in the block (bounded to prevent DoS attacks).
     pub transactions: Vec<String>,
+}
+
+/// Maximum number of transactions allowed per block to prevent memory exhaustion
+const MAX_TRANSACTIONS_PER_BLOCK: usize = 10000;
+
+impl Block {
+    /// Creates a new block with validation for transaction limits
+    pub fn new(id: u64, proposer: String, transactions: Vec<String>) -> Result<Self, String> {
+        if transactions.len() > MAX_TRANSACTIONS_PER_BLOCK {
+            return Err(format!(
+                "Too many transactions in block. Maximum {} allowed, got {}",
+                MAX_TRANSACTIONS_PER_BLOCK,
+                transactions.len()
+            ));
+        }
+        
+        // Validate proposer ID length
+        if proposer.len() > 256 {
+            return Err("Proposer ID too long".to_string());
+        }
+        
+        Ok(Block {
+            id,
+            proposer,
+            transactions,
+        })
+    }
+    
+    /// Adds a transaction to the block with bounds checking
+    pub fn add_transaction(&mut self, transaction: String) -> Result<(), String> {
+        if self.transactions.len() >= MAX_TRANSACTIONS_PER_BLOCK {
+            return Err("Block transaction limit reached".to_string());
+        }
+        
+        // Validate transaction size to prevent large string allocations
+        if transaction.len() > 4096 {  // 4KB limit per transaction
+            return Err("Transaction too large".to_string());
+        }
+        
+        self.transactions.push(transaction);
+        Ok(())
+    }
 }
 
 /// Implements the PoSyg + DCS consensus engine for a single validator.
@@ -193,33 +235,34 @@ impl PosygDcsEngine {
         self.synergy_score = score;
     }
 
-    /// Increments the count of proposed blocks by one.
+    /// Increments the count of proposed blocks by one with overflow protection.
     pub fn increment_proposed_blocks(&mut self) {
-        self.proposed_blocks += 1;
+        self.proposed_blocks = self.proposed_blocks.saturating_add(1);
     }
 
-    /// Increments the count of accepted blocks by one.
+    /// Increments the count of accepted blocks by one with overflow protection.
     pub fn increment_accepted_blocks(&mut self) {
-        self.accepted_blocks += 1;
+        self.accepted_blocks = self.accepted_blocks.saturating_add(1);
     }
 }
 
 impl ConsensusEngine for PosygDcsEngine {
     fn propose_block(&self) -> Result<Block, ConsensusError> {
         let block = if self.is_malicious {
-            Block {
-                id: 0,
-                proposer: self.validator_id.clone(),
-                transactions: vec!["invalid_tx".to_string()],
-            }
+            Block::new(
+                0,
+                self.validator_id.clone(),
+                vec!["invalid_tx".to_string()],
+            )
         } else {
-            Block {
-                id: self.proposed_blocks + 1,
-                proposer: self.validator_id.clone(),
-                transactions: vec![],
-            }
+            Block::new(
+                self.proposed_blocks + 1,
+                self.validator_id.clone(),
+                Vec::new(), // Start with empty transactions
+            )
         };
-        Ok(block)
+        
+        block.map_err(|e| ConsensusError::InvalidBlock)
     }
 
     fn validate_block(&self, block: &Block) -> Result<(), ConsensusError> {
@@ -242,8 +285,14 @@ impl ConsensusEngine for PosygDcsEngine {
         let p = if violation_occurred {
             const BASE_PENALTY: f64 = 10.0;
             const MULTIPLIER: f64 = 2.0;
-            self.violations += 1;
-            BASE_PENALTY * MULTIPLIER.powi(self.violations as i32 - 1)
+            const MAX_VIOLATION_EXPONENT: i32 = 10; // Limit to prevent overflow
+            
+            self.violations = self.violations.saturating_add(1);
+            
+            // Bound the exponent to prevent overflow
+            let bounded_exponent = (self.violations as i32 - 1).min(MAX_VIOLATION_EXPONENT);
+            
+            BASE_PENALTY * MULTIPLIER.powi(bounded_exponent)
         } else {
             0.0
         };

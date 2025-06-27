@@ -71,3 +71,32 @@
      );
  }
  
+ #[test]
+ fn test_bridge_user_validation() {
+     let mut service = BridgeService::new();
+     
+     // Test empty user ID
+     let result = service.deposit("", 100);
+     assert!(result.is_err(), "Empty user ID should be rejected");
+     
+     // Test overly long user ID
+     let long_user_id = "x".repeat(300);
+     let result = service.deposit(&long_user_id, 100);
+     assert!(result.is_err(), "Overly long user ID should be rejected");
+     
+     // Test invalid characters
+     let invalid_user_id = "user@#$%";
+     let result = service.deposit(invalid_user_id, 100);
+     assert!(result.is_err(), "Invalid characters in user ID should be rejected");
+ }
+ 
+ #[test]
+ fn test_bridge_overflow_protection() {
+     let mut service = BridgeService::new();
+     let user = "validUser";
+     
+     // Test deposit overflow protection
+     service.deposit(user, u64::MAX - 100).unwrap();
+     let result = service.deposit(user, 200);
+     assert!(result.is_err(), "Deposit causing overflow should be rejected");
+ }
