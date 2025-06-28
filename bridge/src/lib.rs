@@ -5,7 +5,10 @@
  * This file re-exports the bridging functionality as a library crate.
  */
 
- pub mod bridge;
+pub mod bridge;
+pub mod bounded_string;
+pub mod structured_types;
 
- pub use bridge::{BridgeEngine, BridgeService};
+pub use bridge::{BridgeEngine, BridgeService, Transaction, OperationType};
+pub use structured_types::{StructuredTransaction, StructuredBlock, TransactionType};
  

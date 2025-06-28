@@ -1,21 +1,97 @@
 # -----------------------------
 # PEOCHAIN-DEMO: GITIGNORE FILE
 # -----------------------------
-# This file follows a high-tech coding standard to exclude
-# files and directories that should not be committed to Git.
-#
+
 # Rust build artifacts
 /target/
+**/*.rs.bk
+
+# Rust module architecture
+**/target/
+**/Cargo.lock
+**/Cargo.toml.orig
+**/.cargo/
+**/.rustc_info.json
+**/.rustup/
+**/build/
+**/debug/
+**/release/
+**/.fingerprint/
+**/.idea/
+**/.vscode/
+**/.DS_Store
+
 # Go build artifacts
 /bin/
 /pkg/
+*.exe
+*.test
+*.out
+
+# Node.js (if present)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python (if present)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+.env/
+.venv/
+venv/
+
 # Docker
 *.env
 docker-compose.override.yml
+docker-compose.*.yml
+.docker/
+Dockerfile.*
+
 # Logs and temporary files
 *.log
 *.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+
 # System-specific or editor files
 .DS_Store
 .idea/
 .vscode/
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+*.iml
+*.class
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Git
+.git/
+.gitmodules
+*.patch
+*.diff
+
+# Test output
+coverage/
+*.lcov
+
+# Misc
+*.lock
+*.pid
+*.seed
+*.pid.lock
+
+# Ignore local configuration
+local.settings.json

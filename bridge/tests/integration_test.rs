@@ -6,7 +6,8 @@
  * and withdrawal logic works as expected.
  */
 
- use peo_bridge::{BridgeEngine, BridgeService};
+ use peo_bridge::{BridgeEngine, BridgeService, Transaction, OperationType};
+ use peo_bridge::bridge::ProofError;
 
  #[test]
  fn test_bridge_deposit() {
@@ -58,17 +59,13 @@
  #[test]
  fn test_bridge_proof_verification() {
      let service = BridgeService::new();
-     let valid_proof = b"non_empty_proof";
-     let invalid_proof: &[u8] = &[];
+     let valid_proof = vec![1u8, 2, 3]; // first byte non-zero
+     let invalid_proof: Vec<u8> = vec![];
+     let malformed_proof = vec![0u8, 1, 2]; // first byte zero
  
-     assert!(
-         service.verify_proof(valid_proof).is_ok(),
-         "Non-empty proof should be considered valid"
-     );
-     assert!(
-         service.verify_proof(invalid_proof).is_err(),
-         "Empty proof data should be considered invalid"
-     );
+     assert!(service.verify_proof(&valid_proof).is_ok(), "Valid proof should be accepted");
+     assert!(matches!(service.verify_proof(&invalid_proof), Err(ProofError::EmptyProof)), "Empty proof should be rejected");
+     assert!(matches!(service.verify_proof(&malformed_proof), Err(ProofError::InvalidFormat)), "Malformed proof should be rejected");
  }
  
  #[test]
@@ -99,4 +96,19 @@
      service.deposit(user, u64::MAX - 100).unwrap();
      let result = service.deposit(user, 200);
      assert!(result.is_err(), "Deposit causing overflow should be rejected");
+ }
+ 
+ #[test]
+ fn test_structured_transaction_deposit() {
+     let mut service = BridgeService::new();
+     let tx = Transaction {
+         user: "0xUserBridgeStruct".to_string(),
+         amount: 777,
+         op_type: OperationType::Deposit,
+     };
+     let buf = tx.to_bytes().expect("Serialization should succeed");
+     let tx2 = Transaction::from_bytes(&buf).expect("Deserialization should succeed");
+     let result = service.process_transaction(&tx2);
+     assert!(result.is_ok(), "Structured deposit should succeed");
+     assert_eq!(service.get_balance(&tx2.user), 777, "Balance should match structured deposit");
  }

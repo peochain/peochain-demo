@@ -8,13 +8,19 @@ use rand::SeedableRng;
 // Integration test to verify consensus behavior over multiple rounds.
 #[test]
 fn test_consensus_rounds() {
-    let mut network = Network {
-        validators: vec![
-            PosygDcsEngine::new("v1".to_string(), 1000, false),
-            PosygDcsEngine::new("v2".to_string(), 1000, false),
-            PosygDcsEngine::new("v3".to_string(), 1000, true),
-        ],
-    };
+    let mut network = Network::new();
+    
+    // Add validators to the network
+    let validators = vec![
+        PosygDcsEngine::new("v1".to_string(), 1000, false),
+        PosygDcsEngine::new("v2".to_string(), 1000, false),
+        PosygDcsEngine::new("v3".to_string(), 1000, true),
+    ];
+    
+    for validator in validators {
+        let _ = network.add_validator(validator);
+    }
+    
     network.validators[2].set_synergy_score(10.0);
 
     let seed = [42; 32];

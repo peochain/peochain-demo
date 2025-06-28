@@ -6,21 +6,17 @@
  */
 
 use peo_bridge::{BridgeEngine, BridgeService};
+use peo_bridge::bridge::ProofError;
 
 /// Test to verify that proofs exceeding the maximum size are rejected
 #[test]
 fn test_oversized_proof() {
     let service = BridgeService::new();
-    
     // Generate a large proof that exceeds the 64KB limit
     let large_proof = vec![1u8; 70000]; // 70KB
     
     let result = service.verify_proof(&large_proof);
-    assert!(result.is_err(), "Oversized proof should be rejected");
-    
-    if let Err(err) = result {
-        assert!(err.contains("too large"), "Error message should mention size");
-    }
+    assert!(matches!(result, Err(ProofError::OversizedProof)), "Oversized proof should be rejected");
 }
 
 /// Test to verify that empty proofs are rejected
@@ -30,7 +26,7 @@ fn test_empty_proof() {
     let empty_proof: Vec<u8> = Vec::new();
     
     let result = service.verify_proof(&empty_proof);
-    assert!(result.is_err(), "Empty proof should be rejected");
+    assert!(matches!(result, Err(ProofError::EmptyProof)), "Empty proof should be rejected");
 }
 
 /// Test to verify that valid-sized proofs are accepted
@@ -54,17 +50,13 @@ fn test_malformed_proof() {
     let invalid_proof = vec![0u8, 1, 2, 3];
     
     let result = service.verify_proof(&invalid_proof);
-    assert!(result.is_err(), "Malformed proof should be rejected");
-    
-    if let Err(err) = result {
-        assert!(err.contains("Invalid proof format"), "Error should mention format");
-    }
+    assert!(matches!(result, Err(ProofError::InvalidFormat)), "Malformed proof should be rejected");
 }
 
 /// Test memory usage monitoring
 #[test]
 fn test_memory_usage_reporting() {
-    let service = BridgeService::new();
+    let mut service = BridgeService::new();
     
     // Get initial memory usage
     let initial_usage = service.get_memory_usage();

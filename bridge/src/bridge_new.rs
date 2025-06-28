@@ -23,10 +23,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
 use bytes::BytesMut;
-use crate::structured_types::{StructuredTransaction, TransactionType};
 
 /// Maximum allowed length for user identifiers to prevent unbounded allocations
-const MAX_USER_ID_LENGTH: usize = 42; // Reduced to 42 for address + prefix
+const MAX_USER_ID_LENGTH: usize = 256;
 
 /// Maximum size for proof data (64KB)
 const MAX_PROOF_SIZE: usize = 65536; // 64KB
@@ -62,11 +61,9 @@ pub enum OperationType {
     Withdraw,
 }
 
-/// Structured transaction with bounded fields
+/// Structured transaction
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct Transaction {
-    #[serde(with = "crate::bounded_string")]
     pub user: String,
     pub amount: u64,
     pub op_type: OperationType,
@@ -103,39 +100,17 @@ impl Transaction {
     }
 }
 
-/// Custom error for proof verification
-#[derive(Debug)]
-pub enum ProofError {
-    EmptyProof,
-    OversizedProof,
-    InvalidFormat,
-}
-
-impl std::fmt::Display for ProofError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProofError::EmptyProof => write!(f, "Empty proof data provided"),
-            ProofError::OversizedProof => write!(f, "Proof data too large. Maximum size is {} bytes", MAX_PROOF_SIZE),
-            ProofError::InvalidFormat => write!(f, "Invalid proof format"),
-        }
-    }
-}
-
-impl std::error::Error for ProofError {}
-
 /// Trait that defines the essential operations any bridge engine must provide.
 pub trait BridgeEngine {
     fn deposit(&mut self, user: &str, amount: u64) -> Result<(), String>;
     fn withdraw(&mut self, user: &str, amount: u64) -> Result<(), String>;
-    fn verify_proof(&self, proof_data: &[u8]) -> Result<bool, ProofError>;
+    fn verify_proof(&self, proof_data: &[u8]) -> Result<(), String>;
     fn get_balance(&self, user: &str) -> u64;
     fn get_memory_usage(&self) -> usize;
     
     // New methods for structured transactions
     fn process_transaction(&mut self, tx: &Transaction) -> Result<(), String>;
     fn process_transaction_from_bytes(&mut self, data: &[u8]) -> Result<(), String>;
-    fn process_structured_transaction(&mut self, tx: &StructuredTransaction) -> Result<(), String>;
-    fn process_structured_transaction_from_bytes(&mut self, data: &[u8]) -> Result<(), String>;
 }
 
 /// BridgeService is a basic implementation of a cross-chain bridge engine.
@@ -148,8 +123,6 @@ pub struct BridgeService {
     last_stats_report: Instant,
     /// Total number of operations processed
     operations_count: usize,
-    /// Configurable max users
-    max_users: usize,
 }
 
 impl BridgeService {
@@ -159,7 +132,6 @@ impl BridgeService {
             balances: HashMap::new(),
             last_stats_report: Instant::now(),
             operations_count: 0,
-            max_users: 100_000, // Default value
         }
     }
     
@@ -214,7 +186,7 @@ impl BridgeService {
         validate_user_id(user)?;
         if !self.balances.contains_key(user) {
             // Check if maximum capacity is reached
-            if self.balances.len() >= self.max_users {
+            if self.balances.len() >= 100_000 {
                 return Err("Maximum user capacity reached".to_string());
             }
             
@@ -265,17 +237,24 @@ impl BridgeEngine for BridgeService {
 
     /// Minimal proof verification. In reality, this would involve
     /// cryptographic checks of Merkle proofs or signature-based validation.
-    fn verify_proof(&self, proof_data: &[u8]) -> Result<bool, ProofError> {
+    fn verify_proof(&self, proof_data: &[u8]) -> Result<(), String> {
+        // Check proof size to prevent DOS attacks
         if proof_data.is_empty() {
-            return Err(ProofError::EmptyProof);
+            return Err("Empty proof data provided".to_string());
         }
+        
         if proof_data.len() > MAX_PROOF_SIZE {
-            return Err(ProofError::OversizedProof);
+            return Err(format!("Proof data too large. Maximum size is {} bytes, got {}", 
+                               MAX_PROOF_SIZE, proof_data.len()));
         }
+        
+        // Validate proof structure (basic check for demonstration)
+        // In a real implementation, this would perform cryptographic validation
         if proof_data[0] == 0 {
-            return Err(ProofError::InvalidFormat);
+            return Err("Invalid proof format".to_string());
         }
-        Ok(true)
+        
+        Ok(())
     }
 
     /// Returns the current balance of the specified user.
@@ -304,34 +283,5 @@ impl BridgeEngine for BridgeService {
     fn process_transaction_from_bytes(&mut self, data: &[u8]) -> Result<(), String> {
         let tx = Transaction::from_bytes(data)?;
         self.process_transaction(&tx)
-    }
-    
-    /// Process structured transaction (more efficient than string-based)
-    fn process_structured_transaction(&mut self, tx: &StructuredTransaction) -> Result<(), String> {
-        match tx.tx_type {
-            TransactionType::Transfer => {
-                // For bridge operations, we treat transfers as deposits or withdrawals
-                // based on the to/from addresses
-                if tx.to == "bridge_deposit" {
-                    self.deposit(&tx.from, tx.amount)
-                } else if tx.from == "bridge_withdraw" {
-                    self.withdraw(&tx.to, tx.amount)
-                } else {
-                    Err("Invalid bridge transaction type".to_string())
-                }
-            },
-            TransactionType::Mint => self.deposit(&tx.to, tx.amount),
-            TransactionType::Burn => self.withdraw(&tx.from, tx.amount),
-            TransactionType::SmartContract => {
-                // For demo purposes, reject smart contract transactions
-                Err("Smart contract transactions not supported in bridge".to_string())
-            }
-        }
-    }
-    
-    /// Process structured transaction from bytes
-    fn process_structured_transaction_from_bytes(&mut self, data: &[u8]) -> Result<(), String> {
-        let tx = StructuredTransaction::from_bytes(data)?;
-        self.process_structured_transaction(&tx)
     }
 }

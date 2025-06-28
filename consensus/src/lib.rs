@@ -1,9 +1,14 @@
 // src/lib.rs
 
+use bytes::BytesMut;
 use rand::Rng;
 use rand::thread_rng;
+use serde::{Serialize, Deserialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+
+pub mod messages;
+pub use messages::*;
 
 /// Represents errors that can occur during consensus operations.
 ///
@@ -377,54 +382,51 @@ impl PosygDcsEngine {
 
 impl ConsensusEngine for PosygDcsEngine {
     fn propose_block(&self) -> Result<Block, ConsensusError> {
-        // Create transactions for the block
-        let transactions = if self.is_malicious {
-            // Malicious validator attempts to create oversized transactions or invalid blocks
-            match rand::thread_rng().gen_range(0..3) {
-                0 => vec!["invalid_tx".to_string()],
-                1 => {
-                    // Try to create an oversized transaction (will be rejected)
-                    vec!["x".repeat(MAX_TRANSACTION_SIZE + 1000)]
-                },
-                _ => {
-                    // Try to create too many transactions (will be rejected)
-                    let tx_count = MAX_TRANSACTIONS_PER_BLOCK + 10;
-                    (0..tx_count).map(|i| format!("tx{}", i)).collect()
-                }
-            }
-        } else {
-            // Honest validator creates valid blocks
-            Vec::new() // Start with empty transactions
-        };
-    
-        // Attempt to create a new block
-        let block = Block::new(
-            self.proposed_blocks + 1,
-            self.validator_id.clone(),
-            transactions,
-        );
+        // Generate a mock block with string-based transactions for backward compatibility
+        let mut rng = thread_rng();
+        let num_transactions = rng.gen_range(1..=5);
+        let mut transactions = Vec::new();
         
-        // Convert string errors to ConsensusError type
-        match block {
-            Ok(b) => Ok(b),
-            Err(e) => {
-                if e.contains("too large") {
-                    Err(ConsensusError::BlockSizeTooLarge)
-                } else if e.contains("Too many transactions") {
-                    Err(ConsensusError::TooManyTransactions)
-                } else {
-                    Err(ConsensusError::InvalidBlock)
-                }
+        for i in 0..num_transactions {
+            if self.is_malicious && i == 0 {
+                transactions.push("invalid_tx".to_string());
+            } else {
+                transactions.push(format!("tx_{}", i));
             }
         }
+        
+        Block::new(
+            self.proposed_blocks + 1,
+            format!("validator_{}", self.validator_id),
+            transactions,
+        ).map_err(|_| ConsensusError::InvalidBlock)
     }
-
+    
+    /// Enhanced block validation using structured types
     fn validate_block(&self, block: &Block) -> Result<(), ConsensusError> {
+        // String-based validation for backward compatibility
         if block.transactions.contains(&"invalid_tx".to_string()) {
-            Err(ConsensusError::InvalidBlock)
-        } else {
-            Ok(())
+            return Err(ConsensusError::InvalidBlock);
         }
+        
+        // Additional validation for block structure
+        if block.transactions.len() > MAX_TRANSACTIONS_PER_BLOCK {
+            return Err(ConsensusError::TooManyTransactions);
+        }
+        
+        // Validate each transaction string format
+        for tx in &block.transactions {
+            if tx.len() > MAX_TRANSACTION_SIZE {
+                return Err(ConsensusError::InvalidTransaction);
+            }
+            
+            // Simple format validation
+            if tx.is_empty() || tx.contains("invalid") {
+                return Err(ConsensusError::InvalidTransaction);
+            }
+        }
+        
+        Ok(())
     }
 
     fn update_scores(&mut self, block_accepted: bool, violation_occurred: bool) {
@@ -472,16 +474,14 @@ impl ConsensusEngine for PosygDcsEngine {
 /// ```rust
 /// use peo_consensus::{Network, PosygDcsEngine, ConsensusEngine};
 ///
-/// let mut network = Network {
-///     validators: vec![
-///         PosygDcsEngine::new("v1".to_string(), 1000, false),
-///         PosygDcsEngine::new("v2".to_string(), 1500, false),
-///     ],
-///     last_memory_report: std::time::Instant::now(),
-///     blocks_processed: 0,
-///     max_validators: 1000,
-/// };
-/// network.run_consensus_round();
+/// let mut network = Network::new();
+/// let validator1 = PosygDcsEngine::new("v1".to_string(), 1000, false);
+/// let validator2 = PosygDcsEngine::new("v2".to_string(), 1500, false);
+/// 
+/// network.add_validator(validator1).unwrap();
+/// network.add_validator(validator2).unwrap();
+/// 
+/// let _ = network.run_consensus_round();
 /// let v1 = &network.validators[0];
 /// assert!(v1.proposed_blocks() <= 1);
 /// ```
@@ -572,7 +572,8 @@ impl Network {
             .map(|v| v.get_synergy_score() + v.stake as f64 * 0.01)
             .sum();
 
-        if total_weight == 0.0 {
+        // If total weight is zero or negative, use uniform random selection
+        if total_weight <= 0.0 {
             return thread_rng().gen_range(0..self.validators.len());
         }
 
@@ -660,5 +661,231 @@ impl Network {
     /// Returns the estimated memory usage of this network
     pub fn get_memory_usage(&self) -> usize {
         self.estimate_memory_usage()
+    }
+}
+
+/// Enhanced Block structure using structured transactions instead of strings
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct StructuredBlock {
+    pub id: u64,
+    
+    #[serde(deserialize_with = "messages::bounded_string")]
+    pub proposer: String,
+    
+    #[serde(deserialize_with = "bounded_transactions_structured")]
+    pub transactions: Vec<ConsensusTransaction>,
+    
+    pub timestamp: u64,
+    pub parent_hash: [u8; 32],
+    pub merkle_root: [u8; 32],
+}
+
+/// Custom deserializer for bounded structured transactions
+fn bounded_transactions_structured<'de, D>(deserializer: D) -> Result<Vec<ConsensusTransaction>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let transactions: Vec<ConsensusTransaction> = Vec::deserialize(deserializer)?;
+    
+    if transactions.len() > MAX_TRANSACTIONS_PER_BLOCK {
+        return Err(serde::de::Error::custom(format!(
+            "Too many transactions: {} > {}",
+            transactions.len(),
+            MAX_TRANSACTIONS_PER_BLOCK
+        )));
+    }
+    
+    Ok(transactions)
+}
+
+impl StructuredBlock {
+    /// Creates a new structured block with validation
+    pub fn new(
+        id: u64,
+        proposer: String,
+        transactions: Vec<ConsensusTransaction>,
+        parent_hash: [u8; 32],
+    ) -> Result<Self, ConsensusError> {
+        if transactions.len() > MAX_TRANSACTIONS_PER_BLOCK {
+            return Err(ConsensusError::TooManyTransactions);
+        }
+        
+        if proposer.len() > MAX_PROPOSER_ID_LENGTH {
+            return Err(ConsensusError::InvalidBlock);
+        }
+        
+        // Calculate merkle root and timestamp
+        let merkle_root = Self::calculate_merkle_root(&transactions)?;
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| ConsensusError::InvalidBlock)?
+            .as_secs();
+        
+        let block = Self {
+            id,
+            proposer,
+            transactions,
+            timestamp,
+            parent_hash,
+            merkle_root,
+        };
+        
+        block.validate()?;
+        Ok(block)
+    }
+    
+    /// Validates the block structure and all transactions
+    pub fn validate(&self) -> Result<(), ConsensusError> {
+        if self.proposer.len() > MAX_PROPOSER_ID_LENGTH {
+            return Err(ConsensusError::InvalidBlock);
+        }
+        
+        if self.transactions.len() > MAX_TRANSACTIONS_PER_BLOCK {
+            return Err(ConsensusError::TooManyTransactions);
+        }
+        
+        // Validate all transactions
+        for tx in &self.transactions {
+            if !tx.is_valid() {
+                return Err(ConsensusError::InvalidTransaction);
+            }
+        }
+        
+        // Check total block size
+        let serialized_size = bincode::serialize(self)
+            .map_err(|_| ConsensusError::BlockSizeTooLarge)?
+            .len();
+        
+        if serialized_size > MAX_BLOCK_SIZE {
+            return Err(ConsensusError::BlockSizeTooLarge);
+        }
+        
+        Ok(())
+    }
+    
+    /// Serializes block to bytes using efficient binary format
+    pub fn to_bytes(&self) -> Result<BytesMut, ConsensusError> {
+        self.validate()?;
+        
+        let serialized = bincode::serialize(self)
+            .map_err(|_| ConsensusError::InvalidBlock)?;
+        
+        Ok(BytesMut::from(&serialized[..]))
+    }
+    
+    /// Deserializes block from bytes
+    pub fn from_bytes(data: &[u8]) -> Result<Self, ConsensusError> {
+        if data.len() > MAX_BLOCK_SIZE {
+            return Err(ConsensusError::BlockSizeTooLarge);
+        }
+        
+        let block: Self = bincode::deserialize(data)
+            .map_err(|_| ConsensusError::InvalidBlock)?;
+        
+        block.validate()?;
+        Ok(block)
+    }
+    
+    /// Calculates merkle root from transactions
+    fn calculate_merkle_root(transactions: &[ConsensusTransaction]) -> Result<[u8; 32], ConsensusError> {
+        if transactions.is_empty() {
+            return Ok([0u8; 32]);
+        }
+        
+        // Simplified merkle root calculation
+        let mut root = [0u8; 32];
+        for (i, tx) in transactions.iter().enumerate() {
+            let tx_hash = tx.hash().map_err(|_| ConsensusError::InvalidTransaction)?;
+            for j in 0..32 {
+                root[j] ^= tx_hash[j].wrapping_add(i as u8);
+            }
+        }
+        
+        Ok(root)
+    }
+}
+
+/// Enhanced consensus engine that uses structured transactions instead of strings
+/// Enhanced consensus engine with structured transaction support
+pub trait StructuredConsensusEngine {
+    /// Proposes a new structured block
+    fn propose_structured_block(&self) -> Result<StructuredBlock, ConsensusError>;
+    
+    /// Validates a structured block
+    fn validate_structured_block(&self, block: &StructuredBlock) -> Result<(), ConsensusError>;
+    
+    /// Updates scores based on structured block processing
+    fn update_scores_structured(&mut self, block_accepted: bool, violation_occurred: bool);
+    
+    /// Gets the current synergy score
+    fn get_synergy_score_structured(&self) -> f64;
+}
+
+impl StructuredConsensusEngine for PosygDcsEngine {
+    fn propose_structured_block(&self) -> Result<StructuredBlock, ConsensusError> {
+        let mut rng = thread_rng();
+        let num_transactions = rng.gen_range(1..=10);
+        let mut transactions = Vec::new();
+        
+        for i in 0..num_transactions {
+            let tx = if self.is_malicious && i == 0 {
+                // Create an invalid transaction for malicious validators
+                ConsensusTransaction::new(
+                    "".to_string(), // Invalid empty address
+                    "to_addr".to_string(),
+                    100,
+                    "malicious_data".to_string(),
+                    i as u64,
+                    21000,
+                    1,
+                ).unwrap_or_else(|_| {
+                    // Fallback to a different invalid transaction
+                    ConsensusTransaction {
+                        from: "invalid".to_string(),
+                        to: "invalid".to_string(),
+                        amount: 0,
+                        data: "invalid".to_string(),
+                        nonce: 0,
+                        gas_limit: 0, // Invalid gas limit
+                        gas_price: 0, // Invalid gas price
+                    }
+                })
+            } else {
+                ConsensusTransaction::new(
+                    format!("addr_{}", i),
+                    format!("addr_{}", (i + 1) % 10),
+                    rng.gen_range(1..=1000),
+                    format!("data_{}", i),
+                    i as u64,
+                    21000,
+                    rng.gen_range(1..=50),
+                ).map_err(|_| ConsensusError::InvalidTransaction)?
+            };
+            
+            transactions.push(tx);
+        }
+        
+        let parent_hash = [0u8; 32]; // Simplified for demo
+        
+        StructuredBlock::new(
+            self.proposed_blocks + 1,
+            format!("validator_{}", self.validator_id),
+            transactions,
+            parent_hash,
+        )
+    }
+    
+    fn validate_structured_block(&self, block: &StructuredBlock) -> Result<(), ConsensusError> {
+        block.validate()
+    }
+    
+    fn update_scores_structured(&mut self, block_accepted: bool, violation_occurred: bool) {
+        // Use the same scoring logic as the original implementation
+        self.update_scores(block_accepted, violation_occurred);
+    }
+    
+    fn get_synergy_score_structured(&self) -> f64 {
+        self.get_synergy_score()
     }
 }
