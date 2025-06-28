@@ -235,16 +235,24 @@ impl BridgeEngine for BridgeService {
         // user's balance.
         self.ensure_user(user)?;
         if let Some(bal) = self.balances.get_mut(user) {
-            *bal = bal
-                .checked_add(amount)
-                .ok_or_else(|| format!("Deposit overflow. user={}", user))?;
+            let old_balance = *bal;
+            match bal.checked_add(amount) {
+                Some(new_balance) => {
+                    *bal = new_balance;
+                    
+                    // Periodically update memory statistics
+                    self.update_memory_stats();
+                    
+                    println!("Deposit successful: user={}, amount={}", user, amount);
+                    Ok(())
+                },
+                None => {
+                    Err(format!("Deposit overflow. user={}, old_balance={}, amount={}", user, old_balance, amount))
+                }
+            }
+        } else {
+            Err("User not found after ensure_user".to_string())
         }
-        
-        // Periodically update memory statistics
-        self.update_memory_stats();
-        
-        println!("Deposit successful: user={}, amount={}", user, amount);
-        Ok(())
     }
 
     /// Simulates a withdrawal from PeoChain to an external chain.
