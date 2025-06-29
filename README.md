@@ -1,22 +1,25 @@
-# PeoChain & PeoPay
+# PeoChain Demo
 
-> **Next-Generation “Layer Meta” Blockchain + Mobile Financial Ecosystem**
+PeoChain Demo is a high-performance, security-focused blockchain test network implemented in Rust. It serves as a reference implementation for the PeoChain architecture, which combines a novel **PoSyg + DCS** consensus mechanism with a compatible **EVM** module. The design prioritizes memory safety, execution speed, and deterministic execution, making it a robust platform for decentralized applications.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14908526.svg)](https://doi.org/10.5281/zenodo.14908526)
+[![Bitcointalk Thread](https://img.shields.io/badge/Bitcointalk-Thread-blue?style=for-the-badge)](https://bitcointalk.org/index.php?topic=5532958.msg65092666#msg65092666)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+---
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15617401.svg)](https://doi.org/10.5281/zenodo.15617401)
+## Key Highlights
 
+- **Rust-Based for Safety and Performance**: Core modules are written in idiomatic Rust, leveraging its ownership model and type system to guarantee memory safety. The codebase contains **zero `unsafe` blocks** in all critical network message paths.
+- **Advanced Consensus (PoSyg + DCS)**: A unique consensus algorithm designed for high-throughput and low-latency transactions, featuring a Dynamic Contribution Scoring (DCS) system to incentivize validators.
+- **EVM Compatibility**: An integrated EVM module allows for the deployment and execution of existing Ethereum smart contracts without modification.
+- **Rigorous Security Audits**: The system has undergone extensive memory safety and message validation audits. Key improvements include:
+    - **Bounded Inputs**: Strict size limits on all network inputs, including proofs (64KB), blocks (8MB), and transactions (32KB), to mitigate DoS attacks.
+    - **Property-Based Testing**: `proptest` is used for fuzzing critical components like proof verification and block validation to ensure resilience against malformed inputs.
+    - **Integer Overflow Protection**: All arithmetic operations in critical financial paths are checked to prevent overflow vulnerabilities.
+- **Mobile-First Bridge**: The architecture includes a cross-chain bridge designed for seamless crypto-to-mobile money conversions.
 
-[![Bitcointalk Thread](https://img.shields.io/badge/Bitcointalk-Thread-blue?style=for-the-badge)](https://bitcointalk.org/index.php?topic=5532958.msg65092666#msg65092666)  
-
-
-PeoChain is an innovative blockchain designed with Rust for high performance, security, and sustainability. It features a unique **PoSyg + DCS** consensus mechanism and an **EVM** module (similar to Ethereum’s), making it easy for developers to deploy smart contracts. PeoPay complements PeoChain by offering a user-friendly, mobile-first platform targeting underbanked populations and anyone looking for fast, affordable finance solutions.
-
-**Key Highlights**
-- **Rust-Based Consensus**: High-speed, low-latency transactions with a synergy scoring system (DCS).
-- **EVM Compatibility**: Deploy or integrate with existing Ethereum smart contracts.
-- **Mobile Focus**: Seamless crypto-to-mobile money conversions, bridging the gap between decentralized blockchain technology and real-world usage.
+For a detailed overview of the security enhancements, see the [Memory Safety Implementation Report](MEMORY_SAFETY_REPORT.md).
 
 ---
 
@@ -24,135 +27,84 @@ PeoChain is an innovative blockchain designed with Rust for high performance, se
 
 ```plaintext
 peochain-demo/
-├── consensus/
-│   ├── src/
-│   │   └── main.rs
-│   ├── tests/
-│   ├── Cargo.toml
-│   └── Dockerfile
-├── evm/
-│   ├── src/
-│   ├── contracts/
-│   ├── tests/
-│   ├── Cargo.toml
-│   └── Dockerfile
-├── bridge/
-│   ├── src/
-│   ├── tests/
-│   ├── Cargo.toml
-│   └── Dockerfile
-├── api/
-│   ├── src/
-│   │   ├── main.go
-│   │   └── handlers.go
-│   ├── go.mod
-│   └── Dockerfile
-├── scripts/
-│   ├── deploy_testnet.sh
-│   ├── init_data.sh
-│   └── start_nodes.sh
-├── docs/
-│   ├── architecture.md
-│   ├── investor_pitch.md
-│   └── roadmap.md
-├── docker-compose.yml
-├── Makefile
-└── ci/
-    └── github-actions.yml
+├── consensus/            # Rust code for the PoSyg + DCS consensus algorithm
+├── evm/                  # EVM module for smart contract execution
+├── bridge/               # Cross-chain bridge logic
+├── api/                  # Go-based REST API for node management and user endpoints
+├── scripts/              # Deployment and network management scripts
+├── docs/                 # Architectural documentation and project roadmap
+├── ci/                   # CI/CD configurations (e.g., GitHub Actions)
+├── docker-compose.yml    # Docker orchestration for a complete test network
+└── Makefile              # High-level commands for build, test, and deploy
 ```
-
-- **consensus/**: Rust code implementing the PoSyg + DCS algorithm.
-- **evm/**: EVM module for smart contract compatibility and execution.
-- **bridge/**: Cross-chain bridge logic to connect external blockchains to PeoChain.
-- **api/**: Go-based REST API providing services like node management, contract deployment, and user-facing endpoints.
-- **scripts/**: Shell scripts for deploying and managing the test network.
-- **docs/**: Contains architectural documentation, pitch decks, and project roadmaps.
-- **docker-compose.yml**: Orchestration file to run all containers for a demo network.
-- **Makefile**: Basic commands for build, test, and deploy.
-- **ci/**: GitHub Actions or other CI/CD configuration.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- **Rust (1.68+ recommended)**  
-- **Go (1.19+ recommended)**  
-- **Docker & Docker Compose**  
-- **Fedora 41** (as a reference OS, though other platforms may work)
+- **Rust (1.68+ recommended)**
+- **Go (1.19+ recommended)**
+- **Docker & Docker Compose**
+- A compatible Linux distribution (e.g., Fedora 41, Ubuntu 22.04)
 
-### Building & Testing
+### Building and Testing
 
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/dkrizhanovskyi/peochain-demo.git
-   cd peochain-demo
-   ```
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/peochain/peochain-demo.git
+    cd peochain-demo
+    ```
 
-2. **Build All Services**:
-   ```bash
-   make build
-   ```
-   This compiles Rust modules (consensus, evm, bridge) and the Go API.
+2.  **Build All Components**:
+    This command compiles the Rust modules (consensus, evm, bridge) and the Go API.
+    ```bash
+    make build
+    ```
 
-3. **Run Tests**:
-   ```bash
-   make test
-   ```
-   Runs integration and unit tests for all modules.
+3.  **Run All Tests**:
+    This executes unit and integration tests for all modules, including property-based fuzzing tests.
+    ```bash
+    make test
+    ```
 
-### Deployment
+### Local Deployment
 
-1. **Deploy with Docker Compose**:
-   ```bash
-   ./scripts/deploy_testnet.sh
-   ```
-   This script builds and starts all containers (consensus-node, evm-node, bridge-service, api-service) in detached mode.
+1.  **Deploy the Test Network**:
+    This script builds and starts all services (consensus-node, evm-node, bridge-service, api-service) in detached mode using Docker Compose.
+    ```bash
+    ./scripts/deploy_testnet.sh
+    ```
 
-2. **Initialize Data**:
-   ```bash
-   ./scripts/init_data.sh
-   ```
-   Sets up initial accounts, deploys example smart contracts, and configures validators.
+2.  **Initialize Network Data**:
+    This script sets up initial accounts, deploys example smart contracts, and configures the network validators.
+    ```bash
+    ./scripts/init_data.sh
+    ```
 
-3. **Check Status**:
-   - Access the Go API at `http://localhost:8080/health` or `http://localhost:8080/status`.
+3.  **Verify Network Status**:
+    Check the health of the API service, which indicates the status of the underlying nodes.
+    ```bash
+    curl http://localhost:8080/health
+    ```
 
 ---
 
 ## Contributing
 
-We welcome contributions to improve PeoChain & PeoPay. Whether you’re adding new features, fixing bugs, or helping with documentation:
+We welcome contributions that improve PeoChain. This includes feature enhancements, bug fixes, performance optimizations, and documentation.
 
-1. **Fork** the repository  
-2. **Create** a new branch (`feature/my-new-feature`)  
-3. **Commit** your changes and push  
-4. **Open** a Pull Request, describing your modifications in detail.
+1.  **Fork** the repository.
+2.  Create a new branch for your feature (`feature/my-new-feature`).
+3.  Commit your changes and push them to your fork.
+4.  Open a **Pull Request** with a detailed description of your changes.
 
----
+## Citing This Work
 
-## Community & Support
-
-- **Discussions**: [GitHub Discussions](https://github.com/orgs/PeoPay/discussions)  
-- **Bugs & Issues**: [GitHub Issues](https://github.com/orgs/PeoPay/issues)  
-- **Official Support**: [support@peopay.io](mailto:support@peopay.io)
+If you use this software in your research, please cite it using the information in `CITATION.cff`.
 
 ---
 
-## Author
+## Author & License
 
-This project is initially authored and maintained by **Daniil Krizhanovskyi** (Blockchain Cryptographer, Smart Contracts Auditor). Feel free to connect on [LinkedIn](https://www.linkedin.com/in/dkrizhanovskyi-seceng/), [GitHub](https://github.com/dkrizhanovskyi), or via email at [dk.arecibo@proton.me](mailto:dk.arecibo@proton.me) for inquiries related to security, audits, or blockchain architecture.
-
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
-
----
-[<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Layer 2s are blockchain’s B-team—slow, shaky, and stuck. PeoChain’s synergy, speed, and scale bury them. The future’s here. Lead or bleed: <a href="https://t.co/q08fs2yUEo">https://t.co/q08fs2yUEo</a> <a href="https://twitter.com/hashtag/crypto?src=hash&amp;ref_src=twsrc%5Etfw">#crypto</a>, <a href="https://twitter.com/hashtag/blockchain?src=hash&amp;ref_src=twsrc%5Etfw">#blockchain</a>, <a href="https://twitter.com/hashtag/DeFi?src=hash&amp;ref_src=twsrc%5Etfw">#DeFi</a>, <a href="https://twitter.com/hashtag/PeoPay?src=hash&amp;ref_src=twsrc%5Etfw">#PeoPay</a>, <a href="https://twitter.com/hashtag/Layer2Dead?src=hash&amp;ref_src=twsrc%5Etfw">#Layer2Dead</a></p>&mdash; Daniil Krizhanovskyi (@arec1b0) <a href="https://twitter.com/arec1b0/status/1893168863338021373?ref_src=twsrc%5Etfw">February 22, 2025</a></blockquote>](https://twitter.com/arec1b0/status/1893168863338021373)
-
-## Linked Documents
-
-- [SynLedger White Paper](linked/SynLedger_White_Paper.pdf): Outlines the technical architecture and financial model for the SynLedger project, including advanced PoSyg consensus details and tokenomics considerations.
-- [PoSyg Consensus Mechanism](linked/PoSyg_Consensus_Mechanism.pdf): Explores the multi-dimensional Synergy Score, reward/penalty systems, and proof-of-stake integration used to incentivize honest participation and deter malicious activity.
-- [Dynamic Contribution Scoring Paper](linked/ssrn-5045954.pdf): Presents a formal mathematical model for the Dynamic Contribution Score (DCS), covering linearity, penalty dominance, and advanced extensions like time-varying weights and stochastic user behavior.
-
----
-© 2025 PeoChain Demo Project
+This project is authored by **PEOCHAIN GmBH** and is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
